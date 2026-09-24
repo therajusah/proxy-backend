@@ -1,0 +1,95 @@
+services:
+  control-plane:
+    build: .
+    environment:
+      APP_ENV: development
+      SECRET_KEY: local-compose-secret-change-me
+      ADMIN_EMAIL: owner@relaynorth.local
+      ADMIN_PASSWORD: change-me-now
+      ALLOWED_PROXY_ORIGINS: http://127.0.0.1:9001,http://localhost:9001
+      ALLOW_LOCAL_TEST_ORIGIN: "true"
+      REQUIRE_REGIONAL_WORKERS: "true"
+      WORKER_SHARED_SECRET: local-worker-secret-change-me
+      RELAY_WORKER_EU_URL: http://eu-worker:8000
+      RELAY_WORKER_US_URL: http://us-worker:8000
+      RELAY_WORKER_APAC_URL: http://apac-worker:8000
+      RELAY_EGRESS_IP_EU: 203.0.113.10
+      RELAY_EGRESS_IP_US: 203.0.113.20
+      RELAY_EGRESS_IP_APAC: 203.0.113.30
+      DATABASE_URL: postgresql+psycopg://relaynorth:relaynorth@postgres:5432/relaynorth
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  eu-worker:
+    build: .
+    command: ["sh", "-c", "uvicorn worker.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+    environment:
+      APP_ENV: development
+      ALLOWED_PROXY_ORIGINS: http://127.0.0.1:9001,http://localhost:9001
+      ALLOW_LOCAL_TEST_ORIGIN: "true"
+      WORKER_ID: eu-worker-01
+      WORKER_REGION: eu
+      WORKER_EGRESS_IP: 203.0.113.10
+      WORKER_SHARED_SECRET: local-worker-secret-change-me
+
+  us-worker:
+    build: .
+    command: ["sh", "-c", "uvicorn worker.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+    environment:
+      APP_ENV: development
+      ALLOWED_PROXY_ORIGINS: http://127.0.0.1:9001,http://localhost:9001
+      ALLOW_LOCAL_TEST_ORIGIN: "true"
+      WORKER_ID: us-worker-01
+      WORKER_REGION: us
+      WORKER_EGRESS_IP: 203.0.113.20
+      WORKER_SHARED_SECRET: local-worker-secret-change-me
+
+  apac-worker:
+    build: .
+    command: ["sh", "-c", "uvicorn worker.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+    environment:
+      APP_ENV: development
+      ALLOWED_PROXY_ORIGINS: http://127.0.0.1:9001,http://localhost:9001
+      ALLOW_LOCAL_TEST_ORIGIN: "true"
+      WORKER_ID: apac-worker-01
+      WORKER_REGION: apac
+      WORKER_EGRESS_IP: 203.0.113.30
+      WORKER_SHARED_SECRET: local-worker-secret-change-me
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: relaynorth
+      POSTGRES_USER: relaynorth
+      POSTGRES_PASSWORD: relaynorth
+    ports:
+      # 5432 is commonly occupied by an existing local PostgreSQL/OrbStack service.
+      # The application default points at this free host port.
+      - "55432:5432"
+    volumes:
+      - relaynorth-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U relaynorth -d relaynorth"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - relaynorth-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+volumes:
+  relaynorth-postgres:
+  relaynorth-redis:
